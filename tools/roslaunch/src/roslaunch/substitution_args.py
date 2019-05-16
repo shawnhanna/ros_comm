@@ -46,6 +46,7 @@ except ImportError:
 
 import rosgraph.names
 import rospkg
+import rospy
 from roslaunch.loader import convert_value
 import math
 
@@ -61,6 +62,23 @@ class ArgException(SubstitutionException):
     Exception for missing $(arg) values
     """
     pass
+
+def _eval_param(name):
+    try:
+        return str(rospy.get_param(name))
+    except KeyError as e:
+        raise SubstitutionException("environment variable %s is not set" % str(e))
+        
+def _param(resolved, a, args, context):
+    """
+    process $(param) arg
+    @return: updated resolved argument
+    @rtype: str
+    @raise SubstitutionException: if arg invalidly specified
+    """
+    if len(args) != 1:
+        raise SubstitutionException("$(param var) command only accepts one argument [%s]"%a)
+    return resolved.replace("$(%s)" % a, _eval_param(args[0]))
 
 def _eval_env(name):
     try:
@@ -288,6 +306,7 @@ _eval_dict={
     'true': True, 'false': False,
     'True': True, 'False': False,
     '__builtins__': {k: __builtins__[k] for k in ['list', 'dict', 'map', 'str', 'float', 'int']},
+    'param': _eval_param,
     'env': _eval_env,
     'optenv': _eval_optenv,
     'find': _eval_find
@@ -357,6 +376,7 @@ def resolve_args(arg_str, context=None, resolve_anon=True):
         return _eval(arg_str[7:-1], context)
     # first resolve variables like 'env' and 'arg'
     commands = {
+        'param': _param,
         'env': _env,
         'optenv': _optenv,
         'anon': _anon,
@@ -371,7 +391,7 @@ def resolve_args(arg_str, context=None, resolve_anon=True):
     return resolved
 
 def _resolve_args(arg_str, context, resolve_anon, commands):
-    valid = ['find', 'env', 'optenv', 'anon', 'arg']
+    valid = ['find', 'param', 'env', 'optenv', 'anon', 'arg']
     resolved = arg_str
     for a in _collect_args(arg_str):
         splits = [s for s in a.split(' ') if s]
